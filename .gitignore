@@ -1,2 +1,4 @@
 # Ignore all node_modules directories
 node_modules
+wp-config.php
+.DS_Store

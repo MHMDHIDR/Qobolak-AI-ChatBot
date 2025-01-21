@@ -1,3 +1,8 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Hide the thumb track scrollbar */
+::-webkit-scrollbar {
+  display: none;
+}

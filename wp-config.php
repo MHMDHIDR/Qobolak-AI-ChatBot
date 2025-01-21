@@ -49,14 +49,14 @@ define('DB_COLLATE', '');
  *
  * @since 2.6.0
  */
-define('AUTH_KEY',         ',l.jNy%8t I#f3ULsnUyD>gX2aKlIW/MDC[]w`)esR&GKd-HKC,a;,yLGu=nspt&');
-define('SECURE_AUTH_KEY',  'BUu;HF#e}>2NI8Mp7pu,aUpb~-mHStEa6kKsPlI$J.:01i,U)J32[0~k&S0YZU|E');
-define('LOGGED_IN_KEY',    '~h^3tsHg8ux)]Q^n^ixu[GMIX6?<~bLR*=a:EZ(c8<Llm}rIpv0iV[L1tj3R!#hy');
-define('NONCE_KEY',        ']Rf}!,9RilMYHAvJ|XQAf>;mUCfq>b<b91ERtPk&gQI3#T!otNEwv}F5>g`X:y$9');
-define('AUTH_SALT',        'vCb1]BtEjmvfY9$XWGGDGjteP1i&U?S.FY=-+.v!?&MM2C_*I9#?R`TwC9pFs<Iv');
+define('AUTH_KEY', ',l.jNy%8t I#f3ULsnUyD>gX2aKlIW/MDC[]w`)esR&GKd-HKC,a;,yLGu=nspt&');
+define('SECURE_AUTH_KEY', 'BUu;HF#e}>2NI8Mp7pu,aUpb~-mHStEa6kKsPlI$J.:01i,U)J32[0~k&S0YZU|E');
+define('LOGGED_IN_KEY', '~h^3tsHg8ux)]Q^n^ixu[GMIX6?<~bLR*=a:EZ(c8<Llm}rIpv0iV[L1tj3R!#hy');
+define('NONCE_KEY', ']Rf}!,9RilMYHAvJ|XQAf>;mUCfq>b<b91ERtPk&gQI3#T!otNEwv}F5>g`X:y$9');
+define('AUTH_SALT', 'vCb1]BtEjmvfY9$XWGGDGjteP1i&U?S.FY=-+.v!?&MM2C_*I9#?R`TwC9pFs<Iv');
 define('SECURE_AUTH_SALT', 'Ibkl{+k.roU$eB:]~!Xg&]Tls*<,@3Y}b5]4]hSK4xt31XvlCvA~T:C.[bD7FE2J');
-define('LOGGED_IN_SALT',   ',x.kDw8pwtbu9E;_sV]Bt)JiB~`& 5=I<=irc>ZV;}Yc53o6SQzxUHmN&$*(a[ek');
-define('NONCE_SALT',       'I5(HCI8myG5[Qq4M< n949dw&Jr_DVh}jyFDzP_>jX>ognp?M4zwBpZb6d&R](s1');
+define('LOGGED_IN_SALT', ',x.kDw8pwtbu9E;_sV]Bt)JiB~`& 5=I<=irc>ZV;}Yc53o6SQzxUHmN&$*(a[ek');
+define('NONCE_SALT', 'I5(HCI8myG5[Qq4M< n949dw&Jr_DVh}jyFDzP_>jX>ognp?M4zwBpZb6d&R](s1');
 
 /**#@-*/
 
@@ -95,7 +95,7 @@ define('FS_METHOD', 'direct');
 /* That's all, stop editing! Happy publishing. */
 
 /** Absolute path to the WordPress directory. */
-if (! defined('ABSPATH')) {
+if (!defined('ABSPATH')) {
 	define('ABSPATH', __DIR__ . '/');
 }
 
