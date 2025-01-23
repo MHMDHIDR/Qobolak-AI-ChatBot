@@ -1,4 +1,5 @@
 <?php
+
 if (!defined('ABSPATH')) {
   exit;
 }
@@ -40,7 +41,9 @@ class Qobolak_Admin_Settings
       'max_tokens' => min((int) $input['max_tokens'], 150),
       'temperature' => min(max((float) $input['temperature'], 0), 1),
       'rate_limit' => min((int) $input['rate_limit'], 60),
-      'cache_duration' => min((int) $input['cache_duration'], 86400)
+      'cache_duration' => min((int) $input['cache_duration'], 86400),
+      'training_mode' => isset($input['training_mode']) ? (bool) $input['training_mode'] : false,
+      'last_scraped_at' => sanitize_text_field($input['last_scraped_at'] ?? '')
     );
   }
 
@@ -51,7 +54,9 @@ class Qobolak_Admin_Settings
       'max_tokens' => 100,
       'temperature' => 0.7,
       'rate_limit' => 30,
-      'cache_duration' => 3600
+      'cache_duration' => 3600,
+      'training_mode' => false,
+      'last_scraped_at' => ''
     ));
     ?>
     <div class="wrap">
@@ -59,6 +64,7 @@ class Qobolak_Admin_Settings
       <form method="post" action="options.php">
         <?php settings_fields('qobolak_settings_group'); ?>
         <table class="form-table">
+          <!-- Existing settings -->
           <tr>
             <th scope="row">OpenAI API Key</th>
             <td>
@@ -98,6 +104,23 @@ class Qobolak_Admin_Settings
               <p class="description">How long to cache similar responses.</p>
             </td>
           </tr>
+          <tr>
+            <th scope="row">Training Mode</th>
+            <td>
+              <label>
+                <input type="checkbox" name="<?php echo esc_attr($this->option_name); ?>[training_mode]" value="1" <?php checked($options['training_mode'], true); ?> />
+                Enable Training Mode
+              </label>
+            </td>
+          </tr>
+          <tr>
+            <th scope="row">Last Scraped At</th>
+            <td>
+              <input type="text" name="<?php echo esc_attr($this->option_name); ?>[last_scraped_at]"
+                value="<?php echo esc_attr($options['last_scraped_at']); ?>" class="regular-text" readonly />
+              <p class="description">Timestamp of the last external knowledge scraping.</p>
+            </td>
+          </tr>
         </table>
         <?php submit_button(); ?>
       </form>
@@ -112,14 +135,25 @@ class Qobolak_Admin_Settings
       'max_tokens' => 100,
       'temperature' => 0.7,
       'rate_limit' => 30,
-      'cache_duration' => 3600
+      'cache_duration' => 3600,
+      'training_mode' => false,
+      'last_scraped_at' => ''
     );
 
     $settings = get_option('qobolak_openai_settings', $defaults);
 
-    return wp_parse_args($settings, $defaults); // Ensure defaults are merged
+    return wp_parse_args($settings, $defaults);
   }
 
+  // New function to update the last_scraped_at timestamp
+  public function update_last_scraped_at()
+  {
+    $settings = Qobolak_Admin_Settings::get_settings();
+    $settings['last_scraped_at'] = current_time('mysql');
+    update_option('qobolak_openai_settings', $settings);
+  }
 }
 
 new Qobolak_Admin_Settings();
+
+?>

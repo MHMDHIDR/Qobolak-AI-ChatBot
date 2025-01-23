@@ -9,9 +9,9 @@ class Qobolak_Web_Knowledge
     'https://www.qobolak.com/about-us',
     'https://www.qobolak.com/ar/about-us-ar',
     'https://www.qobolak.com/contact-us',
-    'https://www.qobolak.com/ar/contact-us-ar',
+    'https://www.qobolak.com/contact-us-ar',
     'https://www.qobolak.com/services',
-    'https://www.qobolak.com/ar/services-ar',
+    'https://www.qobolak.com/services-ar',
     'https://www.qobolak.com/student-services',
     'https://www.qobolak.com/ar/student-services-ar',
     'https://www.qobolak.com/scholarship-and-training-abroad-management-services',
@@ -23,112 +23,350 @@ class Qobolak_Web_Knowledge
   ];
 
   private $table_name;
+  private $training_table;
 
   public function __construct()
   {
     global $wpdb;
     $this->db = $wpdb;
     $this->table_name = $wpdb->prefix . 'qobolak_external_knowledge';
-    $this->init_table();
+    $this->training_table = $wpdb->prefix . 'qobolak_training_data';
+    $this->init_tables();
   }
 
-  private function init_table()
+  private function init_tables()
   {
     $charset_collate = $this->db->get_charset_collate();
 
-    $sql = "CREATE TABLE IF NOT EXISTS $this->table_name (
-            id bigint(20) NOT NULL AUTO_INCREMENT,
-            url varchar(255) NOT NULL,
-            title text NOT NULL,
-            content longtext NOT NULL,
-            section varchar(50) NOT NULL,
-            last_scraped datetime DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY  (id),
-            UNIQUE KEY url (url)
-        ) $charset_collate;";
+    $main_table_sql = "CREATE TABLE IF NOT EXISTS $this->table_name (
+      id bigint(20) NOT NULL AUTO_INCREMENT,
+      url varchar(255) NOT NULL,
+      title text NOT NULL,
+      content longtext NOT NULL,
+      section varchar(50) NOT NULL,
+      last_scraped datetime DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY  (id),
+      UNIQUE KEY url (url)
+  ) $charset_collate;";
+
+    // Training data table
+    $training_table_sql = "CREATE TABLE IF NOT EXISTS $this->training_table (
+      id bigint(20) NOT NULL AUTO_INCREMENT,
+      question text NOT NULL,
+      answer longtext NOT NULL,
+      created_at datetime DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY  (id)
+  ) $charset_collate;";
 
     require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
-    dbDelta($sql);
+    dbDelta($main_table_sql);
+    dbDelta($training_table_sql);
+  }
+
+  public function store_training_data($question, $answer)
+  {
+    if (empty($question) || empty($answer)) {
+      return false;
+    }
+
+    // Normalize line endings and preserve them
+    $answer = str_replace(["\r\n", "\r"], "\n", $answer);
+
+    return $this->db->insert(
+      $this->training_table,
+      [
+        'question' => $question,
+        'answer' => $answer,
+        'created_at' => current_time('mysql')
+      ],
+      ['%s', '%s', '%s']
+    );
+  }
+
+  private function get_openai_embedding($text, $api_key)
+  {
+    $url = 'https://api.openai.com/v1/embeddings';
+    $headers = [
+      'Content-Type: application/json',
+      'Authorization: Bearer ' . $api_key
+    ];
+
+    $data = [
+      'input' => $text,
+      'model' => 'text-embedding-ada-002'
+    ];
+
+    $ch = curl_init($url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
+    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+
+    $response = curl_exec($ch);
+    $err = curl_error($ch);
+    curl_close($ch);
+
+    if ($err) {
+      error_log('OpenAI Embedding Error: ' . $err);
+      return null;
+    }
+
+    $result = json_decode($response, true);
+    return $result['data'][0]['embedding'] ?? null;
+  }
+
+  private function ask_openai($question, $context, $api_key)
+  {
+    $url = 'https://api.openai.com/v1/chat/completions';
+    $headers = [
+      'Content-Type: application/json',
+      'Authorization: Bearer ' . $api_key
+    ];
+
+    $messages = [
+      [
+        'role' => 'system',
+        'content' => "You are a helpful assistant for Qobolak. Your task is to find the most relevant answer from the provided context. If the context contains a relevant answer, provide it. If not, indicate that you cannot find a specific answer. Context:\n\n" . $context
+      ],
+      [
+        'role' => 'user',
+        'content' => $question
+      ]
+    ];
+
+    $data = [
+      'model' => 'gpt-3.5-turbo',
+      'messages' => $messages,
+      'temperature' => 0.3,
+      'max_tokens' => 500
+    ];
+
+    $ch = curl_init($url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
+    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+
+    $response = curl_exec($ch);
+    $err = curl_error($ch);
+    curl_close($ch);
+
+    if ($err) {
+      error_log('OpenAI Chat Error: ' . $err);
+      return null;
+    }
+
+    $result = json_decode($response, true);
+    return $result['choices'][0]['message']['content'] ?? null;
+  }
+
+  public function get_training_response($question)
+  {
+    $settings = get_option('qobolak_openai_settings');
+    if (empty($settings['api_key'])) {
+      error_log('OpenAI API key not configured');
+      return null;
+    }
+
+    // Get all training data
+    $all_qa_pairs = $this->db->get_results(
+      "SELECT question, answer FROM $this->training_table",
+      ARRAY_A
+    );
+
+    if (empty($all_qa_pairs)) {
+      return null;
+    }
+
+    // Format context for OpenAI
+    $context = "Here are some question-answer pairs that might be relevant:\n\n";
+    foreach ($all_qa_pairs as $pair) {
+      $context .= "Q: {$pair['question']}\nA: {$pair['answer']}\n\n";
+    }
+
+    // Get OpenAI's response
+    $answer = $this->ask_openai($question, $context, $settings['api_key']);
+
+    if ($answer && !preg_match('/cannot|don\'t have|no specific|not find/i', $answer)) {
+      return $answer;
+    }
+
+    // If OpenAI couldn't find a good match, try keyword-based search as fallback
+    $keywords = $this->get_keywords($question);
+    if (!empty($keywords)) {
+      $conditions = [];
+      $values = [];
+      foreach ($keywords as $keyword) {
+        if (strlen($keyword) >= 3) {
+          $conditions[] = "LOWER(question) LIKE %s OR LOWER(answer) LIKE %s";
+          $values[] = '%' . $this->db->esc_like($keyword) . '%';
+          $values[] = '%' . $this->db->esc_like($keyword) . '%';
+        }
+      }
+
+      if (!empty($conditions)) {
+        $sql = $this->db->prepare(
+          "SELECT answer FROM $this->training_table WHERE " . implode(' OR ', $conditions) . " LIMIT 1",
+          $values
+        );
+        $fallback_answer = $this->db->get_var($sql);
+        if ($fallback_answer) {
+          return str_replace(["\r\n", "\r"], "\n", $fallback_answer);
+        }
+      }
+    }
+
+    return null;
+  }
+
+  private function normalize_text($text)
+  {
+    // Convert to lowercase
+    $text = strtolower($text);
+
+    // Remove extra spaces
+    $text = preg_replace('/\s+/', ' ', trim($text));
+
+    // Remove common punctuation
+    $text = str_replace(['?', '.', ',', '!', ';', ':', '"', "'"], '', $text);
+
+    // Remove common words that don't add meaning
+    $stopwords = ['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by'];
+    $words = explode(' ', $text);
+    $words = array_diff($words, $stopwords);
+
+    return implode(' ', $words);
+  }
+
+  private function get_keywords($text)
+  {
+    $normalized = $this->normalize_text($text);
+    $words = explode(' ', $normalized);
+
+    // Keep words that are 3 or more characters
+    return array_filter($words, function ($word) {
+      return mb_strlen($word) >= 3;
+    });
   }
 
   public function scrape_website()
   {
     if (!class_exists('DOMDocument')) {
-      throw new Exception('DOMDocument class is required for web scraping');
+      error_log('Qobolak AI ChatBot Error: DOMDocument class is required for web scraping');
+      return false;
     }
 
+    // Clear old data before new scrape
+    $this->db->query("TRUNCATE TABLE $this->table_name");
+
+    $success_count = 0;
+    $error_count = 0;
+
     foreach ($this->urls_to_scrape as $url) {
-      $this->scrape_page($url);
-      // Be nice to the server
-      sleep(2);
+      try {
+        if ($this->scrape_page($url)) {
+          $success_count++;
+        } else {
+          $error_count++;
+        }
+        // Be nice to the server
+        sleep(2);
+      } catch (Exception $e) {
+        error_log("Qobolak AI ChatBot Error scraping $url: " . $e->getMessage());
+        $error_count++;
+      }
     }
+
+    error_log("Qobolak AI ChatBot Scraping Complete - Success: $success_count, Errors: $error_count");
+    return $success_count > 0;
   }
 
   private function scrape_page($url)
   {
-    $response = wp_remote_get($url);
+    $response = wp_remote_get($url, [
+      'timeout' => 30,
+      'user-agent' => 'QobolakBot/1.0 (+https://www.qobolak.com)'
+    ]);
+
     if (is_wp_error($response)) {
+      error_log('Qobolak AI ChatBot Error: ' . $response->get_error_message());
       return false;
     }
 
     $html = wp_remote_retrieve_body($response);
+    if (empty($html)) {
+      return false;
+    }
 
     libxml_use_internal_errors(true);
     $doc = new DOMDocument();
-    $doc->loadHTML($html);
+    $doc->loadHTML(mb_convert_encoding($html, 'HTML-ENTITIES', 'UTF-8'));
     libxml_clear_errors();
 
     $xpath = new DOMXPath($doc);
 
-    // Extract main title
-    $title = $this->extract_text($xpath, '//h1');
-
-    // Extract navigation links
-    $nav_links = $this->extract_text($xpath, '//ul[@id="top-menu"]//a');
-
-    // Extract hero section
-    $hero_titles = $this->extract_text($xpath, '//div[contains(@class, "et_pb_slide")]//h2');
-    $hero_descriptions = $this->extract_text($xpath, '//div[contains(@class, "et_pb_slide")]//p');
-
-    // Extract services
-    $services = $this->extract_text($xpath, '//div[contains(@class, "et_pb_blurb")]//h4');
-
-    // Extract testimonials
-    $testimonials = $this->extract_text($xpath, '//div[contains(@class, "et_pb_testimonial")]//p');
-    $authors = $this->extract_text($xpath, '//div[contains(@class, "et_pb_testimonial")]//span[contains(@class, "et_pb_testimonial_author")]');
-
-    // Extract "Message From Qabolak"
-    $message_title = $this->extract_text($xpath, '//div[contains(@class, "et_pb_text_2")]//h2');
-    $message_content = $this->extract_text($xpath, '//div[contains(@class, "et_pb_text_3")]//p');
-
-    // Extract statistics
-    $years_in_industry = $this->extract_text($xpath, '//div[contains(@class, "et_pb_number_counter_0")]//span[@class="percent-value"]');
-    $years_label = $this->extract_text($xpath, '//div[contains(@class, "et_pb_number_counter_0")]//h3');
-
-    $students_served = $this->extract_text($xpath, '//div[contains(@class, "et_pb_number_counter_1")]//span[@class="percent-value"]');
-    $students_label = $this->extract_text($xpath, '//div[contains(@class, "et_pb_number_counter_1")]//h3');
-
-    $partners_worldwide = $this->extract_text($xpath, '//div[contains(@class, "et_pb_number_counter_2")]//span[@class="percent-value"]');
-    $partners_label = $this->extract_text($xpath, '//div[contains(@class, "et_pb_number_counter_2")]//h3');
-
-    // Extract "Why Us?"
-    $why_us_title = $this->extract_text($xpath, '//div[contains(@class, "et_pb_text_8")]//h2');
-    $why_us_descriptions = [
-      $this->extract_text($xpath, '//div[contains(@class, "et_pb_blurb_4")]//p'),
-      $this->extract_text($xpath, '//div[contains(@class, "et_pb_blurb_5")]//p'),
-      $this->extract_text($xpath, '//div[contains(@class, "et_pb_blurb_6")]//p'),
-      $this->extract_text($xpath, '//div[contains(@class, "et_pb_blurb_7")]//p')
+    // Extract content sections
+    $sections = [
+      'title' => $this->extract_text($xpath, '//h1'),
+      'description' => $this->extract_text($xpath, '//meta[@name="description"]/@content'),
+      'main_content' => $this->extract_text($xpath, '//main//p | //article//p | //div[contains(@class, "content")]//p'),
+      'headings' => $this->extract_text($xpath, '//h2 | //h3 | //h4'),
     ];
-    $know_more_link = $this->extract_text($xpath, '//div[contains(@class, "et_pb_button_1_wrapper")]//a/@href');
-
-    // Combine content for storage
-    $content = "Navigation Links: $nav_links\nHero Titles: $hero_titles\nHero Descriptions: $hero_descriptions\nServices: $services\nTestimonials: $testimonials\nAuthors: $authors\nMessage Title: $message_title\nMessage Content: $message_content\nStatistics:\n - $years_in_industry $years_label\n - $students_served $students_label\n - $partners_worldwide $partners_label\nWhy Us?\n - Title: $why_us_title\n - Descriptions: " . implode("\n - ", $why_us_descriptions) . "\n - Know More: $know_more_link";
-
-    // Determine section based on URL
-    $section = $this->determine_section($url);
 
     // Store in database
-    $this->store_content($url, $title, $content, $section);
+    return $this->db->insert(
+      $this->table_name,
+      [
+        'url' => $url,
+        'title' => $sections['title'],
+        'content' => json_encode($sections),
+        'section' => $this->determine_section($url),
+        'last_scraped' => current_time('mysql')
+      ],
+      ['%s', '%s', '%s', '%s', '%s']
+    );
+  }
+
+  public function find_relevant_content($query)
+  {
+    $query = $this->db->esc_like($query);
+
+    // First try exact matches
+    $results = $this->db->get_results($this->db->prepare(
+      "SELECT * FROM $this->table_name
+       WHERE MATCH(title, content) AGAINST(%s IN BOOLEAN MODE)
+       OR title LIKE %s
+       OR content LIKE %s
+       LIMIT 5",
+      $query,
+      '%' . $query . '%',
+      '%' . $query . '%'
+    ));
+
+    if (empty($results)) {
+      // Try fuzzy matching if no exact matches
+      $words = explode(' ', $query);
+      $like_conditions = [];
+      foreach ($words as $word) {
+        if (strlen($word) > 3) {
+          $like_conditions[] = $this->db->prepare(
+            "title LIKE %s OR content LIKE %s",
+            '%' . $word . '%',
+            '%' . $word . '%'
+          );
+        }
+      }
+
+      if (!empty($like_conditions)) {
+        $results = $this->db->get_results(
+          "SELECT * FROM $this->table_name
+           WHERE " . implode(' OR ', $like_conditions) . "
+           LIMIT 5"
+        );
+      }
+    }
+
+    return $results;
   }
 
   private function extract_text($xpath, $query)
@@ -160,59 +398,7 @@ class Qobolak_Web_Knowledge
     return 'general';
   }
 
-  private function store_content($url, $title, $content, $section)
-  {
-    return $this->db->replace(
-      $this->table_name,
-      array(
-        'url' => $url,
-        'title' => $title,
-        'content' => $content,
-        'section' => $section,
-        'last_scraped' => current_time('mysql')
-      ),
-      array('%s', '%s', '%s', '%s', '%s')
-    );
-  }
-
-  public function find_relevant_content($query)
-  {
-    // First try exact section matching
-    $section = $this->guess_section($query);
-    if ($section) {
-      $results = $this->db->get_results($this->db->prepare(
-        "SELECT * FROM $this->table_name WHERE section = %s",
-        $section
-      ));
-      if (!empty($results)) {
-        return $results;
-      }
-    }
-
-    // Fallback to full-text search
-    $words = explode(' ', $query);
-    $search_terms = array_filter($words, function ($word) {
-      return strlen($word) > 3;
-    });
-
-    if (empty($search_terms)) {
-      return array();
-    }
-
-    $where_clauses = array();
-    foreach ($search_terms as $term) {
-      $where_clauses[] = $this->db->prepare(
-        "(content LIKE %s OR title LIKE %s)",
-        '%' . $this->db->esc_like($term) . '%',
-        '%' . $this->db->esc_like($term) . '%'
-      );
-    }
-
-    $sql = "SELECT * FROM $this->table_name WHERE " . implode(' OR ', $where_clauses);
-    return $this->db->get_results($sql);
-  }
-
-  private function guess_section($query)
+  public function guess_section($query)
   {
     $query = strtolower($query);
     if (strpos($query, 'study') !== false || strpos($query, 'university') !== false)

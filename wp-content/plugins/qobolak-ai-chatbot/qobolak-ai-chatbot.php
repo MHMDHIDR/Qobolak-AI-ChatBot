@@ -33,26 +33,23 @@ function qobolak_activate_plugin()
 {
     // Create necessary database tables
     $knowledge = new Qobolak_Web_Knowledge();
+    $knowledge->__construct();
 
     // Set default options
     if (!get_option('qobolak_openai_settings')) {
         add_option('qobolak_openai_settings', array(
             'api_key' => '',
-            'max_tokens' => 150,
-            'temperature' => 0.7,
+            'max_tokens' => 500,
+            'temperature' => 0.3,
             'rate_limit' => 30,
-            'cache_duration' => 3600
+            'cache_duration' => 3600,
+            'training_mode' => false
         ));
     }
 
     // Schedule initial website scraping
-    if (!wp_next_scheduled('qobolak_initial_scrape')) {
-        wp_schedule_single_event(time() + 60, 'qobolak_initial_scrape');
-    }
-
-    // Schedule regular updates
-    if (!wp_next_scheduled('qobolak_update_knowledge')) {
-        wp_schedule_event(time(), 'weekly', 'qobolak_update_knowledge');
+    if (!wp_next_scheduled('qobolak_scrape_knowledge')) {
+        wp_schedule_event(time(), 'daily', 'qobolak_scrape_knowledge');
     }
 
     // Create cache directory
@@ -72,8 +69,31 @@ register_deactivation_hook(__FILE__, 'qobolak_deactivate_plugin');
 function qobolak_deactivate_plugin()
 {
     // Clear scheduled tasks
-    wp_clear_scheduled_hook('qobolak_update_knowledge');
-    wp_clear_scheduled_hook('qobolak_initial_scrape');
+    wp_clear_scheduled_hook('qobolak_scrape_knowledge');
+}
+
+// Add the scraping action
+add_action('qobolak_scrape_knowledge', function () {
+    $knowledge = new Qobolak_Web_Knowledge();
+    $result = $knowledge->scrape_website();
+
+    if ($result) {
+        update_option('qobolak_last_scrape', current_time('timestamp'));
+    }
+
+    error_log('Qobolak Knowledge Scraping: ' . ($result ? 'Success' : 'Failed'));
+});
+
+// Add custom schedule
+add_filter('cron_schedules', 'qobolak_add_cron_schedules');
+
+function qobolak_add_cron_schedules($schedules)
+{
+    $schedules['daily'] = array(
+        'interval' => 86400, // 24 hours in seconds
+        'display' => __('Once Daily', 'qobolak-ai-chatbot')
+    );
+    return $schedules;
 }
 
 // Plugin uninstall hook
@@ -97,17 +117,6 @@ function qobolak_uninstall_plugin()
         rmdir($cache_dir);
     }
 }
-
-// Initialize scheduled tasks
-add_action('qobolak_initial_scrape', function () {
-    $knowledge = new Qobolak_Web_Knowledge();
-    $knowledge->scrape_website();
-});
-
-add_action('qobolak_update_knowledge', function () {
-    $knowledge = new Qobolak_Web_Knowledge();
-    $knowledge->scrape_website();
-});
 
 // Add admin notice for required setup
 add_action('admin_notices', function () {
