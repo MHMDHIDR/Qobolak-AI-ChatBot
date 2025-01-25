@@ -36,9 +36,12 @@ document.addEventListener('DOMContentLoaded', () => {
 // Chat UI Template
 function createChatUI() {
   document.getElementById('qobolak-chat').innerHTML = `
-    <div class="p-4 w-full max-w-md bg-white rounded-lg shadow-lg">
+    <div class="p-4 w-full bg-white rounded-lg shadow-lg min-w-[25rem] max-w-[25rem]">
       <div class="flex justify-between items-center">
-        <h2 class="text-lg font-semibold">Qobolak AI Assistant</h2>
+        <div class="flex flex-col">
+          <h2 class="text-lg font-semibold">Qobolak AI Assistant</h2>
+          <small class="text-gray-500">How can I help you?</small>
+        </div>
         <button id="qobolak-close" class="px-2 py-1 text-red-500">&times;</button>
       </div>
       <div id="qobolak-messages" class="overflow-y-auto relative mt-4 max-h-64"></div>
@@ -48,6 +51,11 @@ function createChatUI() {
         </svg>
       </button>
       <div class="flex flex-col mt-4">
+        <div class="relative">
+          <div class="absolute top-0 bottom-0 left-0 z-10 w-12 bg-gradient-to-r from-white via-white to-transparent pointer-events-none"></div>
+          <div id="suggested-questions" class="flex overflow-x-auto gap-2 px-10 pb-1 scroll-smooth hide-scrollbar"></div>
+          <div class="absolute top-0 right-0 bottom-0 z-10 w-12 bg-gradient-to-l from-white via-white to-transparent pointer-events-none"></div>
+        </div>
         <span id="qobolak-message-length" class="inline-flex mr-2 text-sm text-gray-500 select-none">${MAX_MESSAGE_LENGTH}/${MAX_MESSAGE_LENGTH}</span>
         <div class="gap-y-1">
           <textarea
@@ -64,6 +72,164 @@ function createChatUI() {
       </div>
     </div>
   `
+
+  // Add styles for hiding scrollbar but keeping functionality
+  const style = document.createElement('style')
+  style.textContent = `
+    .hide-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+    .hide-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+  `
+  document.head.appendChild(style)
+
+  // Load and display suggested questions
+  loadSuggestedQuestions()
+}
+
+// Load suggested questions from WordPress options
+async function loadSuggestedQuestions() {
+  try {
+    const formData = new FormData()
+    formData.append('action', 'qobolak_get_suggested_questions')
+    formData.append('security', qobolakAjax.nonce)
+
+    const response = await fetch(qobolakAjax.url, {
+      method: 'POST',
+      credentials: 'same-origin',
+      body: formData,
+    })
+
+    if (!response.ok) {
+      throw new Error('Network response was not ok')
+    }
+
+    const data = await response.json()
+
+    if (data.success && Array.isArray(data.data.questions)) {
+      const container = document.getElementById('suggested-questions')
+      container.innerHTML = '' // Clear existing questions
+
+      data.data.questions.forEach(question => {
+        const button = document.createElement('button')
+        button.className =
+          'flex-shrink-0 px-3 py-1.5 text-sm text-blue-600 whitespace-nowrap bg-blue-50 rounded-full border border-blue-100 transition-colors hover:bg-blue-100'
+        button.textContent = question
+        button.addEventListener('click', () => {
+          const input = document.getElementById('qobolak-input')
+          input.value = question
+          sendMessage(question)
+          input.value = ''
+
+          // Scroll button into view
+          button.scrollIntoView({
+            behavior: 'smooth',
+            block: 'nearest',
+            inline: 'center',
+          })
+        })
+        container.appendChild(button)
+      })
+
+      // Add scroll buttons if content overflows
+      if (container.scrollWidth > container.clientWidth) {
+        const scrollLeft = document.createElement('button')
+        scrollLeft.className =
+          'absolute left-2 top-1/2 z-20 p-1.5 bg-white rounded-full shadow-md transition-colors -translate-y-1/2 hover:bg-gray-50'
+        scrollLeft.innerHTML =
+          '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>'
+        scrollLeft.addEventListener('click', () => {
+          container.scrollBy({ left: -150, behavior: 'smooth' })
+        })
+        container.parentElement.appendChild(scrollLeft)
+
+        const scrollRight = document.createElement('button')
+        scrollRight.className =
+          'absolute right-2 top-1/2 z-20 p-1.5 bg-white rounded-full shadow-md transition-colors -translate-y-1/2 hover:bg-gray-50'
+        scrollRight.innerHTML =
+          '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>'
+        scrollRight.addEventListener('click', () => {
+          container.scrollBy({ left: 150, behavior: 'smooth' })
+        })
+        container.parentElement.appendChild(scrollRight)
+
+        // Show/hide scroll buttons based on scroll position
+        const updateScrollButtons = () => {
+          const isAtStart = container.scrollLeft === 0
+          const isAtEnd =
+            container.scrollLeft + container.clientWidth >= container.scrollWidth - 1
+
+          scrollLeft.style.opacity = isAtStart ? '0' : '1'
+          scrollRight.style.opacity = isAtEnd ? '0' : '1'
+          scrollLeft.style.pointerEvents = isAtStart ? 'none' : 'auto'
+          scrollRight.style.pointerEvents = isAtEnd ? 'none' : 'auto'
+        }
+
+        container.addEventListener('scroll', updateScrollButtons)
+        updateScrollButtons()
+      }
+    } else {
+      console.error('Invalid response format:', data)
+    }
+  } catch (error) {
+    console.error('Failed to load suggested questions:', error)
+  }
+}
+
+// Function to convert URLs to clickable links
+function convertUrlsToLinks(text) {
+  return text.replace(
+    /(https?:\/\/[^\s<]+|www\.[^\s<]+\.[^\s<]+|[a-zA-Z0-9][a-zA-Z0-9-]*\.[a-zA-Z]{2,}\/?[^\s<]*)/gi,
+    url => {
+      const fullUrl = url.startsWith('http')
+        ? url
+        : url.startsWith('www.')
+        ? 'http://' + url
+        : 'http://' + url
+      return `<a href="${fullUrl}" target="_blank" rel="noopener noreferrer" class="text-blue-600 underline break-words hover:text-blue-800">${url}</a>`
+    }
+  )
+}
+
+function createMessageElement(sender, text, timestamp) {
+  const isUser = sender === 'user'
+  const isArabic = /[\u0600-\u06FF]/.test(text)
+  const direction = isArabic ? 'rtl' : 'ltr'
+
+  const messageDiv = document.createElement('div')
+  messageDiv.classList = `mb-4 flex ${isUser ? 'justify-end' : 'justify-start'}`
+
+  // Clean up text - remove extra whitespace while preserving line breaks
+  let cleanText = text
+    .split('\n')
+    .map(line => line.trim())
+    .filter(Boolean)
+    .join('\n')
+
+  // Convert URLs to clickable links
+  cleanText = convertUrlsToLinks(cleanText)
+
+  messageDiv.innerHTML = `
+    <div class="max-w-[80%] flex flex-col">
+      <div class="${
+        isUser ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-800'
+      } px-4 py-2 rounded-t-2xl ${
+    isUser ? 'rounded-bl-2xl' : 'rounded-br-2xl'
+  } shadow-sm" style="direction:${direction};unicode-bidi:embed;white-space:pre-wrap;word-break:break-word">${cleanText}</div>
+      <div class="${isUser ? 'text-right' : 'text-left'} text-xs text-gray-500 mt-1 px-1">
+        <span>${isUser ? 'You' : 'QobolakAgent'}</span> •
+        <span class="message-time" data-timestamp="${timestamp}" title="${
+    new Date(timestamp).toISOString().split('T')[1].split('.')[0]
+  }">
+          ${formatTimeAgo(timestamp)}
+        </span>
+      </div>
+    </div>`
+
+  return messageDiv
 }
 
 // State
@@ -141,42 +307,6 @@ function scrollToBottom() {
 }
 
 // Message Functions
-function createMessageElement(sender, text, timestamp) {
-  const isUser = sender === 'user'
-  const isArabic = /[\u0600-\u06FF]/.test(text)
-  const direction = isArabic ? 'rtl' : 'ltr'
-
-  const messageDiv = document.createElement('div')
-  messageDiv.classList = `mb-4 flex ${isUser ? 'justify-end' : 'justify-start'}`
-
-  // Clean up text - remove extra whitespace while preserving line breaks
-  const cleanText = text
-    .split('\n')
-    .map(line => line.trim())
-    .filter(Boolean)
-    .join('\n')
-
-  messageDiv.innerHTML = `
-    <div class="max-w-[80%] flex flex-col">
-      <div class="${
-        isUser ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-800'
-      } px-4 py-2 rounded-t-2xl ${
-    isUser ? 'rounded-bl-2xl' : 'rounded-br-2xl'
-  } shadow-sm" style="direction:${direction};unicode-bidi:embed;white-space:pre-wrap;word-break:break-word">${cleanText}</div>
-      <div class="${isUser ? 'text-right' : 'text-left'} text-xs text-gray-500 mt-1 px-1">
-        <span>${isUser ? 'You' : 'QobolakAgent'}</span> •
-        <span
-          class="message-time"
-          data-timestamp="${timestamp}"
-          title="${new Date(timestamp).toISOString().split('T')[1].split('.')[0]}"
-        >
-        ${formatTimeAgo(timestamp)}</span>
-      </div>
-    </div>`
-
-  return messageDiv
-}
-
 async function sendMessage(message) {
   if (!message.trim()) return
 
@@ -231,18 +361,111 @@ async function sendMessage(message) {
         sender: 'bot',
         text: data.data.response,
         timestamp: botTimestamp,
+        isTraining: data.data.is_training,
+        fromTraining: data.data.from_training,
       })
       saveMessagesToLocalStorage(chatHistory)
 
-      previousQuestion = data.data.is_training ? data.data.previous_question : null
+      // Handle training mode
+      if (data.data.is_training) {
+        // If this is a training response, show a special input box
+        const trainingDiv = document.createElement('div')
+        trainingDiv.classList = 'flex flex-col gap-2 mt-4'
+        trainingDiv.innerHTML = `
+          <textarea
+            class="px-3 py-2 w-full text-gray-700 rounded-lg border resize-none focus:outline-none"
+            placeholder="Type your answer to teach me..."
+            rows="2"
+            dir="auto"
+          ></textarea>
+          <div class="flex gap-2">
+            <button class="flex-1 px-4 py-2 text-white bg-green-500 rounded-lg hover:bg-green-600">
+              Submit Answer
+            </button>
+            <button class="px-4 py-2 text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300">
+              Skip
+            </button>
+          </div>
+        `
+
+        const submitBtn = trainingDiv.querySelector('button:first-child')
+        const skipBtn = trainingDiv.querySelector('button:last-child')
+        const textarea = trainingDiv.querySelector('textarea')
+
+        submitBtn.addEventListener('click', async () => {
+          const answer = textarea.value.trim()
+          if (answer) {
+            trainingDiv.remove()
+            // Create a new FormData object specifically for training submission
+            const trainingData = new FormData()
+            trainingData.append('action', 'qobolak_chat')
+            trainingData.append('security', qobolakAjax.nonce)
+            trainingData.append('is_training', 'true')
+            trainingData.append('previous_question', data.data.previous_question)
+            trainingData.append('training_answer', answer)
+            trainingData.append('message', '') // Add empty message to indicate this is an answer submission
+
+            try {
+              const response = await fetch(qobolakAjax.url, {
+                method: 'POST',
+                body: trainingData,
+              })
+              const result = await response.json()
+
+              if (result.success) {
+                const confirmTimestamp = Date.now()
+                const confirmMessageDiv = createMessageElement(
+                  'bot',
+                  result.data.response,
+                  confirmTimestamp
+                )
+                messagesDiv.appendChild(confirmMessageDiv)
+                scrollToBottom()
+                previousQuestion = null // Reset the training state
+              }
+            } catch (error) {
+              console.error('Error submitting training answer:', error)
+              const errorMessage = createMessageElement(
+                'bot',
+                'Sorry, there was an error saving your answer. Please try again.',
+                Date.now()
+              )
+              messagesDiv.appendChild(errorMessage)
+              scrollToBottom()
+            }
+          }
+        })
+
+        skipBtn.addEventListener('click', () => {
+          trainingDiv.remove()
+          previousQuestion = null
+          const skipMessage = createMessageElement(
+            'bot',
+            'No problem! Feel free to ask me another question.',
+            Date.now()
+          )
+          messagesDiv.appendChild(skipMessage)
+          scrollToBottom()
+        })
+
+        messagesDiv.appendChild(trainingDiv)
+        scrollToBottom()
+        textarea.focus()
+      } else if (data.data.training_complete) {
+        // Training answer was successfully saved
+        previousQuestion = null
+      } else {
+        previousQuestion = null
+      }
     } else {
       const errorDiv = createMessageElement(
         'bot',
-        'Sorry, I encountered an error. Please try again.',
+        data.data.message || 'Sorry, I encountered an error. Please try again.',
         Date.now()
       )
       messagesDiv.appendChild(errorDiv)
       scrollToBottom()
+      previousQuestion = null
     }
   } catch (error) {
     console.error('Error:', error)
@@ -253,6 +476,7 @@ async function sendMessage(message) {
     )
     messagesDiv.appendChild(errorDiv)
     scrollToBottom()
+    previousQuestion = null
   }
 }
 

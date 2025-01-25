@@ -9,6 +9,10 @@ require_once plugin_dir_path(__FILE__) . 'class-qobolak-web-knowledge.php';
 add_action('wp_ajax_qobolak_chat', 'qobolak_chat_handler');
 add_action('wp_ajax_nopriv_qobolak_chat', 'qobolak_chat_handler');
 
+// Add AJAX handler for suggested questions
+add_action('wp_ajax_qobolak_get_suggested_questions', 'qobolak_get_suggested_questions_handler');
+add_action('wp_ajax_nopriv_qobolak_get_suggested_questions', 'qobolak_get_suggested_questions_handler');
+
 function qobolak_chat_handler()
 {
   // Security check
@@ -23,7 +27,8 @@ function qobolak_chat_handler()
   $previous_question = sanitize_text_field($_POST['previous_question'] ?? '');
   $training_answer = sanitize_text_field($_POST['training_answer'] ?? '');
 
-  if (empty($message)) {
+  // Only require message if not submitting a training answer
+  if (empty($message) && !$is_training) {
     wp_send_json_error(['message' => 'Message cannot be empty.']);
     return;
   }
@@ -43,10 +48,23 @@ function qobolak_chat_handler()
     // If we received a training answer
     if ($is_training && !empty($previous_question) && !empty($training_answer)) {
       try {
-        $knowledge->store_training_data($previous_question, $training_answer);
+        // Store the training data
+        $result = $knowledge->store_training_data($previous_question, $training_answer);
+        if (!$result) {
+          wp_send_json_error(['message' => 'Failed to save training data. Please try again.']);
+          return;
+        }
+
+        // Detect language for response
+        $is_arabic = preg_match('/\p{Arabic}/u', $previous_question);
+        $response = $is_arabic 
+          ? "شكراً لك على التعليم! سأستخدم هذه المعرفة لمساعدة الآخرين. هل تريد أن تسألني سؤالاً آخر؟"
+          : "Thank you for teaching me! I'll use this knowledge to help others. Would you like to ask me another question?";
+
         wp_send_json_success([
-          'response' => "Thank you for teaching me! I've learned this answer and will use it to help others.",
-          'is_training' => false
+          'response' => $response,
+          'is_training' => false,
+          'training_complete' => true
         ]);
         return;
       } catch (Exception $e) {
@@ -56,13 +74,21 @@ function qobolak_chat_handler()
       }
     }
 
-    // Ask for training input
-    wp_send_json_success([
-      'response' => "I'm in training mode and learning! Could you please teach me the correct answer to this question?",
-      'is_training' => true,
-      'previous_question' => $message
-    ]);
-    return;
+    // Only ask for training input if this is a new question
+    if (!empty($message)) {
+      // Detect language for training prompt
+      $is_arabic = preg_match('/\p{Arabic}/u', $message);
+      $response = $is_arabic
+        ? "أنا في وضع التدريب! هل يمكنك تعليمي الإجابة الصحيحة على هذا السؤال؟ يرجى تقديم إجابة دقيقة ومفصلة."
+        : "I'm in training mode! Could you please teach me the correct answer to this question? Please provide a detailed and accurate response.";
+
+      wp_send_json_success([
+        'response' => $response,
+        'is_training' => true,
+        'previous_question' => $message
+      ]);
+      return;
+    }
   }
 
   // Normal mode: First check training data
@@ -72,15 +98,30 @@ function qobolak_chat_handler()
     return;
   }
 
-  // Then check external knowledge
+  // Then try semantic search with OpenAI
   $relevant_content = $knowledge->find_relevant_content($message);
-  if (empty($relevant_content)) {
+  if ($relevant_content) {
+    wp_send_json_success(['response' => $relevant_content]);
+    return;
+  }
+
+  // If no relevant content found and training mode is enabled
+  if ($settings['training_mode']) {
+    $is_arabic = preg_match('/\p{Arabic}/u', $message);
+    $response = $is_arabic
+      ? "عذراً، ليس لدي معلومات محددة عن ذلك. هل تريد أن تعلمني الإجابة الصحيحة؟"
+      : "I don't have specific information about that. Would you like to teach me the correct answer?";
+
     wp_send_json_success([
-      'response' => "I don't have specific information about that in my knowledge base. Would you like to switch to training mode to teach me?",
-      'suggest_training' => true
+      'response' => $response,
+      'is_training' => true,
+      'previous_question' => $message
     ]);
     return;
   }
+
+  // If no content found and training mode is disabled, return the response from find_relevant_content
+  wp_send_json_success(['response' => $relevant_content]);
 
   // Call OpenAI API
   try {
@@ -94,6 +135,21 @@ function qobolak_chat_handler()
     error_log('Qobolak AI ChatBot Error: ' . $e->getMessage());
     wp_send_json_error(['message' => 'An error occurred while processing your request.']);
   }
+}
+
+function qobolak_get_suggested_questions_handler()
+{
+  // Security check
+  if (!check_ajax_referer('qobolak_nonce', 'security', false)) {
+    wp_send_json_error(['message' => 'Invalid nonce.']);
+    exit;
+  }
+
+  // Get suggested questions from options
+  $questions = get_option('qobolak_suggested_questions', []);
+
+  wp_send_json_success(['questions' => $questions]);
+  exit;
 }
 
 function qobolak_handle_chatbot_request($user_input)
