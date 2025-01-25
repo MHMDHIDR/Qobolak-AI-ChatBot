@@ -636,6 +636,14 @@ video {
   bottom: 10rem;
 }
 
+.right-1\/2 {
+  right: 50%;
+}
+
+.right-\[20\%\] {
+  right: 20%;
+}
+
 .z-\[9999\] {
   z-index: 9999;
 }
