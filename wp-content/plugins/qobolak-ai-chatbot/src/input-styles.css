@@ -6,3 +6,11 @@
 ::-webkit-scrollbar {
   display: none;
 }
+
+#scroll-to-bottom {
+  transition: opacity 0.3s ease;
+}
+#scroll-to-bottom.hidden {
+  opacity: 0;
+  pointer-events: none;
+}

@@ -1,209 +1,356 @@
+// Constants
+const MAX_MESSAGE_LENGTH = 500
+
+// Initialize chat interface when button is clicked
 document.addEventListener('DOMContentLoaded', () => {
   const button = document.getElementById('qobolak-btn')
-  const chatBox = document.createElement('div')
-  const MAX_MESSAGE_LENGTH = 500
-  let messageLengthRemaining = MAX_MESSAGE_LENGTH
-  let chatHistory = loadMessagesFromLocalStorage()
-  let previousQuestion = null
+  if (!button) return
 
-  // Create chatbox HTML
-  chatBox.id = 'qobolak-chatbox'
-  chatBox.style.display = 'none'
-  chatBox.classList =
-    'fixed bottom-4 right-4 w-96 bg-white shadow-lg rounded-lg p-4 transition-all transform scale-50 opacity-0'
-  chatBox.innerHTML = `
+  // Create chat box container if it doesn't exist
+  let chatBox = document.getElementById('qobolak-chat')
+  if (!chatBox) {
+    chatBox = document.createElement('div')
+    chatBox.id = 'qobolak-chat'
+    chatBox.classList.add('fixed', 'bottom-4', 'right-4', 'hidden', 'z-50')
+    document.body.appendChild(chatBox)
+  }
+
+  // Initialize chat when button is clicked
+  button.addEventListener('click', () => {
+    if (chatBox.classList.contains('hidden')) {
+      chatBox.classList.remove('hidden')
+      if (!chatBox.hasChildNodes()) {
+        initializeChat()
+      }
+    } else {
+      chatBox.classList.add('hidden')
+      // Clear interval if chat is hidden
+      if (updateInterval) {
+        clearInterval(updateInterval)
+        updateInterval = null
+      }
+    }
+  })
+})
+
+// Chat UI Template
+function createChatUI() {
+  document.getElementById('qobolak-chat').innerHTML = `
+    <div class="p-4 w-full max-w-md bg-white rounded-lg shadow-lg">
       <div class="flex justify-between items-center">
-          <h2 class="text-lg font-bold select-none">Qobolak Chat</h2>
-          <button id="qobolak-close" class="px-2 py-1 text-red-500">&times;</button>
+        <h2 class="text-lg font-semibold">Qobolak AI Assistant</h2>
+        <button id="qobolak-close" class="px-2 py-1 text-red-500">&times;</button>
       </div>
-      <div id="qobolak-messages" class="overflow-y-auto mt-4 max-h-64"></div>
+      <div id="qobolak-messages" class="overflow-y-auto relative mt-4 max-h-64"></div>
+      <button id="scroll-to-bottom" title="Scroll to bottom" class="hidden fixed bottom-40 right-8 z-[9999] p-1.5 text-white bg-blue-500 rounded-full shadow-lg opacity-0 hover:bg-blue-600 transition-all duration-300 ease-in-out transform scale-75">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+        </svg>
+      </button>
       <div class="flex flex-col mt-4">
-          <span id="qobolak-message-length" class="inline-flex mr-2 text-sm text-gray-500 select-none">${messageLengthRemaining}/${MAX_MESSAGE_LENGTH}</span>
-          <div class="gap-y-1">
-            <textarea id="qobolak-input" class="flex-1 p-2 mr-1 rounded-l-lg border resize-none"
-              placeholder="Type your message..." rows="1" max="${MAX_MESSAGE_LENGTH}" dir="auto"></textarea>
-            <button id="qobolak-send" class="px-8 py-2 max-h-48 text-white bg-blue-500 rounded-md hover:bg-blue-600">
-              <strong>Send</strong>
-            </button>
-          </div>
+        <span id="qobolak-message-length" class="inline-flex mr-2 text-sm text-gray-500 select-none">${MAX_MESSAGE_LENGTH}/${MAX_MESSAGE_LENGTH}</span>
+        <div class="gap-y-1">
+          <textarea
+            id="qobolak-input"
+            rows="2"
+            class="px-3 py-2 w-full text-gray-700 rounded-lg border resize-none focus:outline-none"
+            placeholder="Type your message here..."
+            dir="auto"
+          ></textarea>
+          <button id="qobolak-send" class="px-4 py-2 mt-2 w-full text-white bg-blue-500 rounded-lg hover:bg-blue-600">
+            Send
+          </button>
+        </div>
       </div>
+    </div>
   `
-  document.body.appendChild(chatBox)
+}
 
-  const inputField = document.getElementById('qobolak-input')
-  const sendButton = document.getElementById('qobolak-send')
+// State
+let chatHistory = []
+let previousQuestion = null
+let updateInterval = null
+
+// Time Formatting Functions
+function formatTimeAgo(timestamp) {
+  const now = Date.now()
+  const seconds = Math.floor((now - timestamp) / 1000)
+
+  if (seconds < 60) return `${seconds} ${seconds === 1 ? 'second' : 'seconds'} ago`
+
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `${minutes} ${minutes === 1 ? 'min' : 'mins'} ago`
+
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours} ${hours === 1 ? 'hour' : 'hours'} ago`
+
+  const days = Math.floor(hours / 24)
+  if (days < 7) return `${days} ${days === 1 ? 'day' : 'days'} ago`
+
+  const weeks = Math.floor(days / 7)
+  if (weeks < 4) return `${weeks} ${weeks === 1 ? 'week' : 'weeks'} ago`
+
+  const months = Math.floor(days / 30)
+  return `${months} ${months === 1 ? 'month' : 'months'} ago`
+}
+
+function startTimestampUpdates() {
+  if (updateInterval) clearInterval(updateInterval)
+  updateInterval = setInterval(() => {
+    document.querySelectorAll('.message-time').forEach(element => {
+      const timestamp = parseInt(element.dataset.timestamp)
+      const timeAgo = formatTimeAgo(timestamp)
+      if (element.textContent !== timeAgo) {
+        element.textContent = timeAgo
+      }
+    })
+  }, 1000)
+}
+
+// Scroll Functions
+function checkScrollPosition() {
+  const scrollButton = document.getElementById('scroll-to-bottom')
+  const messagesDiv = document.getElementById('qobolak-messages')
+  const scrollThreshold = 50
+
+  const scrolledFromBottom =
+    messagesDiv.scrollHeight - messagesDiv.scrollTop - messagesDiv.clientHeight
+
+  if (scrolledFromBottom > scrollThreshold) {
+    scrollButton.classList.remove('hidden')
+    requestAnimationFrame(() => {
+      scrollButton.style.opacity = '1'
+    })
+  } else {
+    scrollButton.style.opacity = '0'
+    setTimeout(() => {
+      if (scrolledFromBottom <= scrollThreshold) {
+        scrollButton.classList.add('hidden')
+      }
+    }, 300)
+  }
+}
+
+function scrollToBottom() {
+  const messagesDiv = document.getElementById('qobolak-messages')
+  messagesDiv.scrollTo({
+    top: messagesDiv.scrollHeight,
+    behavior: 'smooth',
+  })
+  checkScrollPosition()
+}
+
+// Message Functions
+function createMessageElement(sender, text, timestamp) {
+  const isUser = sender === 'user'
+  const isArabic = /[\u0600-\u06FF]/.test(text)
+  const direction = isArabic ? 'rtl' : 'ltr'
+
+  const messageDiv = document.createElement('div')
+  messageDiv.classList = `mb-4 flex ${isUser ? 'justify-end' : 'justify-start'}`
+
+  // Clean up text - remove extra whitespace while preserving line breaks
+  const cleanText = text
+    .split('\n')
+    .map(line => line.trim())
+    .filter(Boolean)
+    .join('\n')
+
+  messageDiv.innerHTML = `
+    <div class="max-w-[80%] flex flex-col">
+      <div class="${
+        isUser ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-800'
+      } px-4 py-2 rounded-t-2xl ${
+    isUser ? 'rounded-bl-2xl' : 'rounded-br-2xl'
+  } shadow-sm" style="direction:${direction};unicode-bidi:embed;white-space:pre-wrap;word-break:break-word">${cleanText}</div>
+      <div class="${isUser ? 'text-right' : 'text-left'} text-xs text-gray-500 mt-1 px-1">
+        <span>${isUser ? 'You' : 'QobolakAgent'}</span> •
+        <span class="message-time" data-timestamp="${timestamp}">${formatTimeAgo(
+    timestamp
+  )}</span>
+      </div>
+    </div>`
+
+  return messageDiv
+}
+
+async function sendMessage(message) {
+  if (!message.trim()) return
+
   const messagesDiv = document.getElementById('qobolak-messages')
 
-  // Clear messagesDiv and load chat history
-  function renderChatHistory() {
-    messagesDiv.innerHTML = '' // Clear previous messages
-    chatHistory.forEach(message => {
-      const messageDiv = document.createElement('div')
-      messageDiv.classList =
-        message.sender === 'user'
-          ? 'text-right mb-2 text-blue-500'
-          : 'text-left mb-2 text-gray-500'
-      messageDiv.textContent = message.text
-      messagesDiv.appendChild(messageDiv)
-    })
-    scrollToBottom()
-  }
+  // Display user message
+  const userTimestamp = Date.now()
+  const userMessageDiv = createMessageElement('user', message, userTimestamp)
+  messagesDiv.appendChild(userMessageDiv)
+  scrollToBottom()
 
-  renderChatHistory() // Load chat history on page load
+  // Save user message
+  chatHistory.push({
+    sender: 'user',
+    text: message,
+    timestamp: userTimestamp,
+  })
+  saveMessagesToLocalStorage(chatHistory)
 
-  function toggleChatBox(show) {
-    chatBox.style.display = show ? 'block' : 'none'
-    if (show) {
-      setTimeout(() => {
-        chatBox.style.transform = 'scale(1)'
-        chatBox.style.opacity = '1'
-      }, 10)
-    }
-  }
+  // Show loading indicator
+  const loadingDiv = document.createElement('div')
+  loadingDiv.classList = 'text-left mb-2 text-gray-500'
+  loadingDiv.textContent = 'Typing...'
+  messagesDiv.appendChild(loadingDiv)
+  scrollToBottom()
 
-  async function sendMessage(message) {
-    if (!message.trim()) return
-
-    appendMessage('user', message)
-
-    const loadingDiv = document.createElement('div')
-    loadingDiv.classList = 'text-left mb-2 text-gray-500'
-    loadingDiv.textContent = 'Typing...'
-    messagesDiv.appendChild(loadingDiv)
-    scrollToBottom()
-
+  try {
     const formData = new FormData()
     formData.append('action', 'qobolak_chat')
     formData.append('message', message)
     formData.append('security', qobolakAjax.nonce)
     formData.append('chatHistory', JSON.stringify(chatHistory))
 
-    // If we have a previous question, this is a training answer
     if (previousQuestion) {
       formData.append('previous_question', previousQuestion)
       formData.append('training_answer', message)
       formData.append('is_training', 'true')
     }
 
-    try {
-      const response = await fetch(qobolakAjax.url, { method: 'POST', body: formData })
-      const data = await response.json()
-      loadingDiv.remove()
+    const response = await fetch(qobolakAjax.url, { method: 'POST', body: formData })
+    const data = await response.json()
+    loadingDiv.remove()
 
-      if (data.success) {
-        appendMessage('bot', data.data.response)
+    if (data.success) {
+      const botTimestamp = Date.now()
+      const botMessageDiv = createMessageElement('bot', data.data.response, botTimestamp)
+      messagesDiv.appendChild(botMessageDiv)
+      scrollToBottom()
 
-        if (data.data.is_training) {
-          previousQuestion = data.data.previous_question // Store for next training response
-        } else {
-          previousQuestion = null // Clear previous question if not in training mode
-        }
-      } else {
-        appendMessage(
-          'bot',
-          data.data.message || 'Sorry, I encountered an error. Please try again.'
-        )
-      }
-    } catch (error) {
-      loadingDiv.remove()
-      appendMessage('bot', 'Sorry, there was an error processing your request.')
-      console.error('Error:', error)
+      // Save bot message
+      chatHistory.push({
+        sender: 'bot',
+        text: data.data.response,
+        timestamp: botTimestamp,
+      })
+      saveMessagesToLocalStorage(chatHistory)
+
+      previousQuestion = data.data.is_training ? data.data.previous_question : null
+    } else {
+      const errorDiv = createMessageElement(
+        'bot',
+        'Sorry, I encountered an error. Please try again.',
+        Date.now()
+      )
+      messagesDiv.appendChild(errorDiv)
+      scrollToBottom()
     }
-
+  } catch (error) {
+    console.error('Error:', error)
+    const errorDiv = createMessageElement(
+      'bot',
+      'Sorry, I encountered an error. Please try again.',
+      Date.now()
+    )
+    messagesDiv.appendChild(errorDiv)
     scrollToBottom()
   }
+}
 
-  function appendMessage(sender, text) {
-    const messageDiv = document.createElement('div')
-    messageDiv.classList =
-      sender === 'user' ? 'text-right mb-2 text-blue-500' : 'text-left mb-2 text-gray-500'
+// Storage Functions
+function saveMessagesToLocalStorage(messages) {
+  try {
+    localStorage.setItem('qobolak-chat-history', JSON.stringify(messages))
+  } catch (error) {
+    console.error('Failed to save messages:', error)
+  }
+}
 
-    // Convert newlines to <br> tags and preserve whitespace
-    const formattedText = text.replace(/\n/g, '<br>')
-    messageDiv.style.whiteSpace = 'pre-wrap'
-    messageDiv.style.wordBreak = 'break-word'
-    messageDiv.innerHTML = formattedText
+function loadMessagesFromLocalStorage() {
+  try {
+    const messages = localStorage.getItem('qobolak-chat-history')
+    return messages
+      ? JSON.parse(messages).map(msg => ({
+          ...msg,
+          timestamp: msg.timestamp || Date.now(),
+        }))
+      : []
+  } catch (error) {
+    console.error('Failed to load messages:', error)
+    return []
+  }
+}
 
+// Initialize Chat
+function initializeChat() {
+  // Create UI
+  createChatUI()
+
+  // Get DOM elements
+  const input = document.getElementById('qobolak-input')
+  const sendButton = document.getElementById('qobolak-send')
+  const messagesDiv = document.getElementById('qobolak-messages')
+  const closeButton = document.getElementById('qobolak-close')
+  const scrollToBottomButton = document.getElementById('scroll-to-bottom')
+
+  // Load chat history
+  chatHistory = loadMessagesFromLocalStorage()
+
+  // Render existing messages
+  messagesDiv.innerHTML = ''
+  chatHistory.forEach(message => {
+    const messageDiv = createMessageElement(
+      message.sender,
+      message.text,
+      message.timestamp
+    )
     messagesDiv.appendChild(messageDiv)
-    scrollToBottom()
+  })
 
-    // Update chat history
-    chatHistory.push({ sender, text })
-    if (chatHistory.length > 50) {
-      chatHistory.shift()
-    }
-    saveMessagesToLocalStorage(chatHistory)
-  }
+  // Start timestamp updates
+  startTimestampUpdates()
 
-  function scrollToBottom() {
-    messagesDiv.scrollTop = messagesDiv.scrollHeight
-  }
+  // Initial scroll
+  scrollToBottom()
 
-  function saveMessagesToLocalStorage(messages) {
-    try {
-      localStorage.setItem('qobolak-chat-history', JSON.stringify(messages))
-    } catch (error) {
-      console.error('Failed to save messages:', error)
-    }
-  }
-
-  function loadMessagesFromLocalStorage() {
-    try {
-      const messages = localStorage.getItem('qobolak-chat-history')
-      return messages ? JSON.parse(messages) : []
-    } catch (error) {
-      console.error('Failed to load messages:', error)
-      return []
-    }
-  }
-
-  // Dynamic textarea height adjustment
-  inputField.addEventListener('input', () => {
-    const messageLength = inputField.value.length
-    messageLengthRemaining = MAX_MESSAGE_LENGTH - messageLength
-
-    // Prevent additional characters if max length is exceeded
-    if (messageLength > MAX_MESSAGE_LENGTH) {
-      inputField.value = inputField.value.slice(0, MAX_MESSAGE_LENGTH)
-      messageLengthRemaining = 0
-    }
-
-    // Adjust the height of the textarea
-    inputField.style.height = 'auto'
-    inputField.style.height = `${inputField.scrollHeight}px`
-
-    // Update remaining characters display
+  // Message input handlers
+  input.addEventListener('input', () => {
+    const messageLengthRemaining = MAX_MESSAGE_LENGTH - input.value.length
     document.getElementById(
       'qobolak-message-length'
     ).textContent = `${messageLengthRemaining}/${MAX_MESSAGE_LENGTH}`
   })
 
-  // Event Listeners
-  button.addEventListener('click', () => toggleChatBox(true))
-  document
-    .getElementById('qobolak-close')
-    .addEventListener('click', () => toggleChatBox(false))
-  document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') toggleChatBox(false)
+  input.addEventListener('keydown', event => {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault()
+      if (input.value.length > 0 && input.value.length <= MAX_MESSAGE_LENGTH) {
+        sendMessage(input.value)
+        input.value = ''
+        document.getElementById(
+          'qobolak-message-length'
+        ).textContent = `${MAX_MESSAGE_LENGTH}/${MAX_MESSAGE_LENGTH}`
+      }
+    }
   })
 
+  // Button handlers
   sendButton.addEventListener('click', () => {
-    const message = inputField.value.trim()
-    if (message) {
-      sendMessage(message)
-      inputField.value = ''
-      inputField.style.height = 'auto'
-      messageLengthRemaining = MAX_MESSAGE_LENGTH
+    if (input.value.length > 0 && input.value.length <= MAX_MESSAGE_LENGTH) {
+      sendMessage(input.value)
+      input.value = ''
       document.getElementById(
         'qobolak-message-length'
-      ).textContent = `${messageLengthRemaining}/${MAX_MESSAGE_LENGTH}`
+      ).textContent = `${MAX_MESSAGE_LENGTH}/${MAX_MESSAGE_LENGTH}`
     }
   })
 
-  inputField.addEventListener('keypress', e => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      sendButton.click()
+  scrollToBottomButton.addEventListener('click', scrollToBottom)
+
+  closeButton.addEventListener('click', () => {
+    document.getElementById('qobolak-chat').style.display = 'none'
+    if (updateInterval) {
+      clearInterval(updateInterval)
+      updateInterval = null
     }
   })
-})
+
+  // Scroll handlers
+  messagesDiv.addEventListener('scroll', checkScrollPosition)
+}
