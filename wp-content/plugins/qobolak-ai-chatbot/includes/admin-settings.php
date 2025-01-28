@@ -126,16 +126,26 @@ class Qobolak_Admin_Settings
               <tr>
                 <th scope="row">OpenAI API Key</th>
                 <td>
-                  <input type="password" name="<?php echo esc_attr($this->option_name); ?>[api_key]"
-                    value="<?php echo esc_attr($options['api_key']); ?>" class="regular-text" />
+                  <div class="password-input-wrapper" style="position: relative;">
+                    <input type="password" name="<?php echo esc_attr($this->option_name); ?>[api_key]"
+                      value="<?php echo esc_attr($options['api_key']); ?>" class="regular-text" />
+                    <button type="button" class="toggle-password" style="position: absolute; right: -2rem; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer;">
+                      <span class="dashicons dashicons-visibility"></span>
+                    </button>
+                  </div>
                   <p class="description">Your OpenAI API key for ChatGPT functionality</p>
                 </td>
               </tr>
               <tr>
                 <th scope="row">Cal.com API Key</th>
                 <td>
-                  <input type="password" name="qobolak_calcom_api_key" value="<?php echo esc_attr($calcom_api_key); ?>"
-                    class="regular-text" />
+                  <div class="password-input-wrapper" style="position: relative;">
+                    <input type="password" name="qobolak_calcom_api_key" value="<?php echo esc_attr($calcom_api_key); ?>"
+                      class="regular-text" />
+                    <button type="button" class="toggle-password" style="position: absolute; right: -2rem; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer;">
+                      <span class="dashicons dashicons-visibility"></span>
+                    </button>
+                  </div>
                   <p class="description">Required for appointment scheduling functionality</p>
                 </td>
               </tr>
@@ -285,6 +295,29 @@ class Qobolak_Admin_Settings
                 } else {
                   $(this).prev('input').val('');
                 }
+              });
+            });
+          </script>
+
+          <script>
+            document.addEventListener('DOMContentLoaded', function() {
+              const toggleButtons = document.querySelectorAll('.toggle-password');
+
+              toggleButtons.forEach(button => {
+                button.addEventListener('click', function() {
+                  const input = this.parentElement.querySelector('input');
+                  const icon = this.querySelector('.dashicons');
+
+                  if (input.type === 'password') {
+                    input.type = 'text';
+                    icon.classList.remove('dashicons-visibility');
+                    icon.classList.add('dashicons-hidden');
+                  } else {
+                    input.type = 'password';
+                    icon.classList.remove('dashicons-hidden');
+                    icon.classList.add('dashicons-visibility');
+                  }
+                });
               });
             });
           </script>

@@ -146,7 +146,8 @@ add_filter('plugin_action_links_' . plugin_basename(__FILE__), function ($links)
 add_action('wp_ajax_qobolak_get_suggested_questions', 'qobolak_get_suggested_questions');
 add_action('wp_ajax_nopriv_qobolak_get_suggested_questions', 'qobolak_get_suggested_questions');
 
-function qobolak_get_suggested_questions() {
+function qobolak_get_suggested_questions()
+{
     check_ajax_referer('qobolak_chat_nonce', 'security');
 
     $questions = get_option('qobolak_suggested_questions', array(

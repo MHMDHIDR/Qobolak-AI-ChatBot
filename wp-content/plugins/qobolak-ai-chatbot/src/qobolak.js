@@ -11,24 +11,70 @@ document.addEventListener('DOMContentLoaded', () => {
   if (!chatBox) {
     chatBox = document.createElement('div')
     chatBox.id = 'qobolak-chat'
-    chatBox.classList.add('fixed', 'bottom-4', 'right-4', 'hidden', 'z-50')
+    chatBox.classList.add(
+      'fixed',
+      'bottom-4',
+      'right-4',
+      'hidden',
+      'z-50',
+      'transform',
+      'scale-95',
+      'opacity-0',
+      'transition-all',
+      'duration-300',
+      'ease-in-out'
+    )
     document.body.appendChild(chatBox)
+  }
+
+  // Function to open chat
+  const openChat = () => {
+    chatBox.classList.remove('hidden')
+    // Force a reflow
+    void chatBox.offsetWidth
+    chatBox.classList.remove('scale-95', 'opacity-0')
+    chatBox.classList.add('scale-100', 'opacity-100')
+
+    if (!chatBox.hasChildNodes()) {
+      initializeChat()
+    }
+  }
+
+  // Function to close chat
+  const closeChat = () => {
+    chatBox.classList.remove('scale-100', 'opacity-100')
+    chatBox.classList.add('scale-95', 'opacity-0')
+
+    setTimeout(() => {
+      chatBox.classList.add('hidden')
+    }, 300)
+
+    if (updateInterval) {
+      clearInterval(updateInterval)
+      updateInterval = null
+    }
   }
 
   // Initialize chat when button is clicked
   button.addEventListener('click', () => {
     if (chatBox.classList.contains('hidden')) {
-      chatBox.classList.remove('hidden')
-      if (!chatBox.hasChildNodes()) {
-        initializeChat()
-      }
+      openChat()
     } else {
-      chatBox.classList.add('hidden')
-      // Clear interval if chat is hidden
-      if (updateInterval) {
-        clearInterval(updateInterval)
-        updateInterval = null
-      }
+      closeChat()
+    }
+  })
+
+  // Add ESC key handler
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && !chatBox.classList.contains('hidden')) {
+      closeChat()
+    }
+  })
+
+  // Add close button handler
+  document.addEventListener('click', event => {
+    if (event.target.id === 'qobolak-close') {
+      closeChat()
     }
   })
 })
@@ -116,7 +162,7 @@ async function loadSuggestedQuestions() {
       data.data.questions.forEach(question => {
         const button = document.createElement('button')
         button.className =
-          'flex-shrink-0 px-3 py-1.5 text-sm text-blue-600 whitespace-nowrap bg-blue-50 rounded-full border border-blue-100 transition-colors hover:bg-blue-100'
+          'flex-shrink-0 px-3 py-1.5 text-sm text-blue-600 whitespace-nowrap bg-blue-50 rounded-full border border-blue-100 shadow-sm transition-colors hover:shadow:md'
         button.textContent = question
         button.addEventListener('click', () => {
           const input = document.getElementById('qobolak-input')
@@ -571,7 +617,6 @@ function initializeChat() {
   scrollToBottomButton.addEventListener('click', scrollToBottom)
 
   closeButton.addEventListener('click', () => {
-    document.getElementById('qobolak-chat').style.display = 'none'
     if (updateInterval) {
       clearInterval(updateInterval)
       updateInterval = null

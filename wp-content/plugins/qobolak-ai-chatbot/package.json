@@ -1,7 +1,7 @@
 {
   "scripts": {
     "dev": "bunx tailwindcss -i ./src/input-styles.css -o ./src/styles.css --watch",
-    "build": "bunx tailwindcss -i ./src/css/style.css -o ./dist/css/style.css"
+    "build": "bunx tailwindcss -i ./src/style.css -o ./dist/style.css"
   },
   "dependencies": {},
   "devDependencies": {
