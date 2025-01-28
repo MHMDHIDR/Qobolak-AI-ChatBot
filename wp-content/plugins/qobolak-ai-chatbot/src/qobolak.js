@@ -81,14 +81,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Chat UI Template
 function createChatUI() {
-  document.getElementById('qobolak-chat').innerHTML = `
-    <div class="p-4 w-full bg-white rounded-lg shadow-lg min-w-[25rem] max-w-[25rem]">
-      <div class="flex justify-between items-center">
-        <div class="flex flex-col">
-          <h2 class="text-lg font-semibold">Qobolak AI Assistant</h2>
-          <small class="text-gray-500">How can I help you?</small>
-        </div>
-        <button id="qobolak-close" class="px-2 py-1 text-red-500">&times;</button>
+  const chatBox = document.getElementById('qobolak-chat')
+  chatBox.innerHTML = `
+    <div id="qobolak-inner" class="p-4 w-full bg-white rounded-lg shadow-lg min-w-[25rem] max-w-[25rem] transition-all duration-300 ease-in-out">
+      <div class="flex justify-between items-center pb-2 mb-4 border-b">
+        <h3 class="text-lg font-semibold">Chat with Qobolak</h3>
+        <button id="qobolak-close" class="text-gray-500 hover:text-gray-700">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+          </svg>
+        </button>
       </div>
       <div id="qobolak-messages" class="overflow-y-auto relative mt-4 max-h-64"></div>
       <button id="scroll-to-bottom" title="Scroll to bottom" class="hidden fixed bottom-40 right-[20%] z-[9999] p-1.5 text-white bg-blue-500 rounded-full shadow-lg opacity-0 hover:bg-blue-600 transition-all duration-300 ease-in-out transform scale-75">
@@ -248,32 +250,38 @@ function createMessageElement(sender, text, timestamp) {
   const messageDiv = document.createElement('div')
   messageDiv.classList = `mb-4 flex ${isUser ? 'justify-end' : 'justify-start'}`
 
-  // Clean up text - remove extra whitespace while preserving line breaks
-  let cleanText = text
-    .split('\n')
-    .map(line => line.trim())
-    .filter(Boolean)
-    .join('\n')
+  // Only create message content if there's text
+  if (text) {
+    const messageContent = document.createElement('div')
+    messageContent.className = 'max-w-[80%] flex flex-col'
 
-  // Convert URLs to clickable links
-  cleanText = convertUrlsToLinks(cleanText)
+    // Clean up text - remove extra whitespace while preserving line breaks
+    let cleanText = text
+      .split('\n')
+      .map(line => line.trim())
+      .filter(Boolean)
+      .join('\n')
 
-  messageDiv.innerHTML = `
-    <div class="max-w-[80%] flex flex-col">
+    // Convert URLs to clickable links
+    cleanText = convertUrlsToLinks(cleanText)
+
+    messageContent.innerHTML = `
       <div class="${
         isUser ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-800'
       } px-4 py-2 rounded-t-2xl ${
-    isUser ? 'rounded-bl-2xl' : 'rounded-br-2xl'
-  } shadow-sm" style="direction:${direction};unicode-bidi:embed;white-space:pre-wrap;word-break:break-word">${cleanText}</div>
+      isUser ? 'rounded-bl-2xl' : 'rounded-br-2xl'
+    } shadow-sm" style="direction:${direction};unicode-bidi:embed;white-space:pre-wrap;word-break:break-word">${cleanText}</div>
       <div class="${isUser ? 'text-right' : 'text-left'} text-xs text-gray-500 mt-1 px-1">
         <span>${isUser ? 'You' : 'QobolakAgent'}</span> •
         <span class="message-time" data-timestamp="${timestamp}" title="${
-    new Date(timestamp).toISOString().split('T')[1].split('.')[0]
-  }">
+      new Date(timestamp).toISOString().split('T')[1].split('.')[0]
+    }">
           ${formatTimeAgo(timestamp)}
         </span>
-      </div>
-    </div>`
+      </div>`
+
+    messageDiv.appendChild(messageContent)
+  }
 
   return messageDiv
 }
@@ -352,9 +360,31 @@ function scrollToBottom() {
   checkScrollPosition()
 }
 
-// Message Functions
+// Move these outside of any function
+const meetingKeywords = [
+  'appointment',
+  'schedule',
+  'meeting',
+  'meet',
+  'book',
+  'consultation',
+]
+
+function shouldOfferMeeting(message) {
+  return meetingKeywords.some(keyword =>
+    message.toLowerCase().includes(keyword.toLowerCase())
+  )
+}
+
+// Modify the existing sendMessage function to include the meeting check
 async function sendMessage(message) {
   if (!message.trim()) return
+
+  // Check for meeting keywords before proceeding
+  if (shouldOfferMeeting(message)) {
+    handleMeetingRequest(document.getElementById('qobolak-messages'))
+    return
+  }
 
   const messagesDiv = document.getElementById('qobolak-messages')
 
@@ -625,4 +655,195 @@ function initializeChat() {
 
   // Scroll handlers
   messagesDiv.addEventListener('scroll', checkScrollPosition)
+}
+
+// Add these functions after the existing code
+
+function handleMeetingRequest(messagesDiv) {
+  // Create message first
+  const messageDiv = createMessageElement(
+    'bot',
+    'Would you like to schedule a meeting?',
+    Date.now()
+  )
+  messagesDiv.appendChild(messageDiv)
+
+  // Create options div separately
+  const optionsDiv = document.createElement('div')
+  optionsDiv.className = 'flex gap-2 mt-4 mb-4' // Added margin-top for spacing
+
+  const yesBtn = document.createElement('button')
+  yesBtn.className = 'px-4 py-2 text-white bg-green-500 rounded hover:bg-green-600'
+  yesBtn.textContent = 'Yes'
+
+  const noBtn = document.createElement('button')
+  noBtn.className = 'px-4 py-2 text-white bg-gray-500 rounded hover:bg-gray-600'
+  noBtn.textContent = 'No'
+
+  optionsDiv.appendChild(yesBtn)
+  optionsDiv.appendChild(noBtn)
+
+  // Add options as a new message
+  const optionsMessageDiv = createMessageElement('bot', '', Date.now())
+  optionsMessageDiv.appendChild(optionsDiv)
+  messagesDiv.appendChild(optionsMessageDiv)
+  scrollToBottom()
+
+  yesBtn.addEventListener('click', () => showDurationOptions(messagesDiv))
+  noBtn.addEventListener('click', () => {
+    const response = createMessageElement(
+      'bot',
+      'Okay, what else can I help you with?',
+      Date.now()
+    )
+    messagesDiv.appendChild(response)
+    scrollToBottom()
+  })
+}
+
+function showDurationOptions(messagesDiv) {
+  // Create message first
+  const messageDiv = createMessageElement(
+    'bot',
+    'Please select a meeting duration:',
+    Date.now()
+  )
+  messagesDiv.appendChild(messageDiv)
+
+  // Create duration options separately
+  const durationDiv = document.createElement('div')
+  durationDiv.className = 'flex flex-col gap-2 mt-4 mb-4' // Added margin-top for spacing
+
+  // Create a new message div for the options
+  const optionsMessageDiv = createMessageElement('bot', '', Date.now())
+  optionsMessageDiv.appendChild(durationDiv)
+  messagesDiv.appendChild(optionsMessageDiv)
+
+  // Get calendar settings from WordPress
+  const formData = new FormData()
+  formData.append('action', 'qobolak_get_calendar_settings')
+  formData.append('security', qobolakAjax.nonce)
+
+  fetch(qobolakAjax.url, {
+    method: 'POST',
+    credentials: 'same-origin',
+    body: formData,
+  })
+    .then(response => response.json())
+    .then(data => {
+      if (data.success && data.data.settings) {
+        Object.entries(data.data.settings).forEach(([duration, settings]) => {
+          if (settings.enabled) {
+            const button = document.createElement('button')
+            button.className =
+              'px-4 py-2 text-white bg-blue-500 rounded hover:bg-blue-600'
+            button.textContent = settings.title
+            button.addEventListener('click', () =>
+              embedCalendar(messagesDiv, settings.cal_link, duration)
+            )
+            durationDiv.appendChild(button)
+          }
+        })
+        scrollToBottom()
+      }
+    })
+}
+
+function expandChatBox() {
+  const chatBox = document.getElementById('qobolak-chat')
+  const innerBox = document.getElementById('qobolak-inner')
+  const messagesDiv = document.getElementById('qobolak-messages')
+
+  // Add transition classes if not already present
+  chatBox.classList.add('transition-all', 'duration-300', 'ease-in-out')
+  innerBox.classList.add('transition-all', 'duration-300', 'ease-in-out')
+
+  // Remove small size classes
+  innerBox.classList.remove('min-w-[25rem]', 'max-w-[25rem]')
+
+  // Add expanded size classes
+  innerBox.classList.add('min-w-[50rem]', 'max-w-[50rem]')
+
+  // Increase messages container height
+  messagesDiv.classList.remove('max-h-64')
+  messagesDiv.classList.add('max-h-[370px]')
+
+  // Force a reflow to ensure the transition works
+  void chatBox.offsetWidth
+}
+
+function embedCalendar(messagesDiv, calLink, duration) {
+  // Expand chat box first
+  expandChatBox()
+
+  const calendarDiv = document.createElement('div')
+  calendarDiv.style = 'width:100%;height:600px;overflow:scroll' // Increased height
+  calendarDiv.id = `cal-inline-${Date.now()}`
+
+  const messageDiv = createMessageElement('bot', '', Date.now())
+  messageDiv.appendChild(calendarDiv)
+  messagesDiv.appendChild(messageDiv)
+  scrollToBottom()
+
+  // Initialize Cal.com with the proper initialization code
+  ;(function (C, A, L) {
+    let p = function (a, ar) {
+      a.q.push(ar)
+    }
+    let d = C.document
+    C.Cal =
+      C.Cal ||
+      function () {
+        let cal = C.Cal
+        let ar = arguments
+        if (!cal.loaded) {
+          cal.ns = {}
+          cal.q = cal.q || []
+          d.head.appendChild(d.createElement('script')).src = A
+          cal.loaded = true
+        }
+        if (ar[0] === L) {
+          const api = function () {
+            p(api, arguments)
+          }
+          const namespace = ar[1]
+          api.q = api.q || []
+          if (typeof namespace === 'string') {
+            cal.ns[namespace] = cal.ns[namespace] || api
+            p(cal.ns[namespace], ar)
+            p(cal, ['initNamespace', namespace])
+          } else {
+            p(cal, ar)
+          }
+          return
+        }
+        p(cal, ar)
+      }
+  })(window, 'https://app.cal.com/embed/embed.js', 'init')
+
+  // Initialize with the specific duration
+  Cal('init', duration, { origin: 'https://cal.com' })
+
+  // Configure the inline calendar
+  Cal.ns[duration]('inline', {
+    elementOrSelector: `#${calendarDiv.id}`,
+    config: {
+      layout: 'month_view',
+    },
+    calLink: calLink,
+  })
+
+  // Add UI customization
+  Cal.ns[duration]('ui', {
+    cssVarsPerTheme: {
+      light: {
+        'cal-brand': '#6366f1', // Indigo color to match our theme
+      },
+      dark: {
+        'cal-brand': '#818cf8',
+      },
+    },
+    hideEventTypeDetails: false,
+    layout: 'month_view',
+  })
 }

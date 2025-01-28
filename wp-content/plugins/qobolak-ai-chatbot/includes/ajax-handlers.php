@@ -13,6 +13,10 @@ add_action('wp_ajax_nopriv_qobolak_chat', 'qobolak_chat_handler');
 add_action('wp_ajax_qobolak_get_suggested_questions', 'qobolak_get_suggested_questions_handler');
 add_action('wp_ajax_nopriv_qobolak_get_suggested_questions', 'qobolak_get_suggested_questions_handler');
 
+// Add this new action at the top with other add_action calls
+add_action('wp_ajax_qobolak_get_calendar_settings', 'qobolak_get_calendar_settings_handler');
+add_action('wp_ajax_nopriv_qobolak_get_calendar_settings', 'qobolak_get_calendar_settings_handler');
+
 function qobolak_chat_handler()
 {
   // Security check
@@ -169,4 +173,12 @@ function call_openai_api_with_context($message, $conversation_context, $knowledg
 
   $response_data = json_decode($response, true);
   return $response_data['choices'][0]['message']['content'] ?? null;
+}
+
+function qobolak_get_calendar_settings_handler()
+{
+  check_ajax_referer('qobolak_nonce', 'security');
+
+  $calendar_settings = get_option('qobolak_calendar_settings', array());
+  wp_send_json_success(array('settings' => $calendar_settings));
 }

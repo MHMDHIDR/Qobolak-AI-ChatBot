@@ -48,11 +48,25 @@ class Qobolak_Admin_Settings
       'sanitize_callback' => array($this, 'sanitize_suggested_questions')
     ));
 
+    // Register calendar settings
+    register_setting('qobolak_settings_group', 'qobolak_calendar_settings', array(
+        'type' => 'array',
+        'default' => array(),
+        'sanitize_callback' => array($this, 'sanitize_calendar_settings')
+    ));
+
     add_settings_section(
       'qobolak_suggested_questions_section',
       'Suggested Questions',
       array($this, 'render_suggested_questions_section'),
       'qobolak-settings'
+    );
+
+    add_settings_section(
+        'qobolak_calendar_section',
+        'Calendar Settings',
+        array($this, 'render_calendar_section'),
+        'qobolak-settings'
     );
   }
 
@@ -77,6 +91,30 @@ class Qobolak_Admin_Settings
     return array_filter(array_map('sanitize_text_field', $questions));
   }
 
+  public function sanitize_calendar_settings($input) {
+    if (!is_array($input)) {
+        return array();
+    }
+
+    $sanitized = array();
+    foreach ($input as $duration => $settings) {
+        if (in_array($duration, ['15min', '30min'])) {
+            // Extract just the username/slug part from the full URL
+            $cal_link = $settings['cal_link'];
+            if (preg_match('#cal\.com/([^/]+/[^/]+)#', $cal_link, $matches)) {
+                $cal_link = $matches[1];
+            }
+
+            $sanitized[$duration] = array(
+                'enabled' => isset($settings['enabled']),
+                'cal_link' => $cal_link, // Store just the path part
+                'title' => sanitize_text_field($settings['title'])
+            );
+        }
+    }
+    return $sanitized;
+  }
+
   public function render_api_section()
   {
     echo '<p>Configure your API keys for various integrations:</p>';
@@ -90,6 +128,48 @@ class Qobolak_Admin_Settings
   public function render_suggested_questions_section()
   {
     echo '<p>Add suggested questions that will appear in the chatbot. Users can click these to quickly ask common questions.</p>';
+  }
+
+  public function render_calendar_section() {
+    $calendar_settings = get_option('qobolak_calendar_settings', array());
+    ?>
+    <div class="p-6 mb-8 bg-indigo-50 rounded-lg">
+        <h2 class="mb-4 text-xl font-semibold text-indigo-800">Calendar Integration</h2>
+        <p class="mb-4 text-indigo-600">Configure your Cal.com meeting durations and links</p>
+
+        <?php foreach (['15min' => '15 Minutes', '30min' => '30 Minutes'] as $duration => $label): ?>
+            <div class="mb-6 p-4 bg-white rounded shadow-sm">
+                <h3 class="text-lg font-medium mb-3"><?php echo esc_html($label); ?> Meeting</h3>
+                <label class="block mb-2">
+                    <input type="checkbox"
+                           name="qobolak_calendar_settings[<?php echo $duration; ?>][enabled]"
+                           value="1"
+                           <?php checked(isset($calendar_settings[$duration]['enabled']) && $calendar_settings[$duration]['enabled']); ?>>
+                    Enable <?php echo esc_html($label); ?> meetings
+                </label>
+
+                <label class="block mb-2">
+                    <span class="text-gray-700">Meeting Title</span>
+                    <input type="text"
+                           class="mt-1 block w-full rounded-md border-gray-300"
+                           name="qobolak_calendar_settings[<?php echo $duration; ?>][title]"
+                           value="<?php echo esc_attr($calendar_settings[$duration]['title'] ?? ''); ?>"
+                           placeholder="e.g., Quick Consultation">
+                </label>
+
+                <label class="block">
+                    <span class="text-gray-700">Cal.com Link</span>
+                    <input type="url"
+                           class="mt-1 block w-full rounded-md border-gray-300"
+                           name="qobolak_calendar_settings[<?php echo $duration; ?>][cal_link]"
+                           value="<?php echo esc_url($calendar_settings[$duration]['cal_link'] ?? ''); ?>"
+                           placeholder="e.g., https://cal.com/qobolak/15min">
+                    <p class="mt-1 text-sm text-gray-500">Enter the full Cal.com URL for this meeting duration</p>
+                </label>
+            </div>
+        <?php endforeach; ?>
+    </div>
+    <?php
   }
 
   public function render_settings_page()

@@ -14,3 +14,6 @@
   opacity: 0;
   pointer-events: none;
 }
+[data-testid='alert'] {
+  display: none !important;
+}
