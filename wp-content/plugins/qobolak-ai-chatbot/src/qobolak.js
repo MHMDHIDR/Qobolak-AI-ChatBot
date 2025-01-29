@@ -85,7 +85,10 @@ function createChatUI() {
   chatBox.innerHTML = `
     <div id="qobolak-inner" class="p-4 w-full bg-white rounded-lg shadow-lg min-w-[25rem] max-w-[25rem] transition-all duration-300 ease-in-out">
       <div class="flex justify-between items-center pb-2 mb-4 border-b">
-        <h3 class="text-lg font-semibold">Chat with Qobolak</h3>
+        <div class="flex flex-col select-none">
+          <h3 class="text-lg font-semibold">Chat with Qobolak</h3>
+          <small class="text-xs">How I can help you today?</small>
+        </div>
         <button id="qobolak-close" class="text-gray-500 hover:text-gray-700">
           <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
@@ -101,7 +104,7 @@ function createChatUI() {
       <div class="flex flex-col mt-4">
         <div class="relative">
           <div class="absolute top-0 bottom-0 left-0 z-10 w-12 bg-gradient-to-r from-white via-white to-transparent pointer-events-none"></div>
-          <div id="suggested-questions" class="flex overflow-x-auto gap-2 px-10 pb-1 scroll-smooth hide-scrollbar"></div>
+          <div id="suggested-questions" class="flex overflow-x-auto gap-2 px-10 pb-1 select-none scroll-smooth hide-scrollbar"></div>
           <div class="absolute top-0 right-0 bottom-0 z-10 w-12 bg-gradient-to-l from-white via-white to-transparent pointer-events-none"></div>
         </div>
         <span id="qobolak-message-length" class="inline-flex mr-2 text-sm text-gray-500 select-none">${MAX_MESSAGE_LENGTH}/${MAX_MESSAGE_LENGTH}</span>
@@ -646,11 +649,15 @@ function initializeChat() {
 
   scrollToBottomButton.addEventListener('click', scrollToBottom)
 
+  let chatBox = document.getElementById('qobolak-chat')
+
   closeButton.addEventListener('click', () => {
-    if (updateInterval) {
-      clearInterval(updateInterval)
-      updateInterval = null
-    }
+    chatBox.classList.remove('scale-100', 'opacity-100')
+    chatBox.classList.add('scale-95', 'opacity-0')
+
+    setTimeout(() => {
+      chatBox.classList.add('hidden')
+    }, 300)
   })
 
   // Scroll handlers
