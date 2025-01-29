@@ -92,7 +92,7 @@ function createChatUI() {
           </svg>
         </button>
       </div>
-      <div id="qobolak-messages" class="overflow-y-auto relative mt-4 max-h-64"></div>
+      <div id="qobolak-messages" class="overflow-y-auto relative mt-4 max-h-64 min-h-20"></div>
       <button id="scroll-to-bottom" title="Scroll to bottom" class="hidden fixed bottom-40 right-[20%] z-[9999] p-1.5 text-white bg-blue-500 rounded-full shadow-lg opacity-0 hover:bg-blue-600 transition-all duration-300 ease-in-out transform scale-75">
         <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
