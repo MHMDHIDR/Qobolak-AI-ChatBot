@@ -50,7 +50,42 @@ function qobolak_chat_handler()
 
   // Handle training mode
   if ($settings['training_mode']) {
-    // ... existing training mode code ...
+    // If no previous question, prompt for training
+    if (empty($previous_question)) {
+      wp_send_json_success([
+        'response' => 'Training mode is enabled. Please provide an example question and its corresponding answer.',
+        'is_training' => true
+      ]);
+      return;
+    }
+
+    // Save training data
+    if (!empty($training_answer)) {
+      global $wpdb;
+      $wpdb->insert(
+        'qo_qobolak_training_data',
+        array(
+          'question' => $previous_question, // Use the stored previous question
+          'answer' => $training_answer,
+          'created_at' => current_time('mysql')
+        ),
+        array('%s', '%s', '%s')
+      );
+
+      wp_send_json_success([
+        'response' => 'Training data saved successfully! You can now ask another question or provide another training example.',
+        'is_training' => true,
+        'training_complete' => true
+      ]);
+      return;
+    }
+
+    // If a question is provided in training mode, ask for its answer
+    wp_send_json_success([
+      'response' => "You've entered training mode. Please provide an answer for the question: '{$message}'",
+      'is_training' => true,
+      'previous_question' => $message // Store the current message as the previous question
+    ]);
     return;
   }
 

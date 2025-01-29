@@ -420,6 +420,7 @@ async function sendMessage(message) {
     formData.append('chatHistory', JSON.stringify(chatHistory))
 
     if (previousQuestion) {
+      // Enhance training mode context management
       formData.append('previous_question', previousQuestion)
       formData.append('training_answer', message)
       formData.append('is_training', 'true')
@@ -435,19 +436,24 @@ async function sendMessage(message) {
       messagesDiv.appendChild(botMessageDiv)
       scrollToBottom()
 
-      // Save bot message
+      // Robust training context tracking
       chatHistory.push({
         sender: 'bot',
         text: data.data.response,
         timestamp: botTimestamp,
-        isTraining: data.data.is_training,
-        fromTraining: data.data.from_training,
+        isTraining: data.data.is_training || false,
+        fromTraining: data.data.from_training || false,
       })
       saveMessagesToLocalStorage(chatHistory)
 
-      // Handle training mode
+      // Improved training mode handling
       if (data.data.is_training) {
-        // If this is a training response, show a special input box
+        // Prevent duplicate training prompts and manage training context
+        if (!previousQuestion || previousQuestion !== data.data.previous_question) {
+          previousQuestion = data.data.previous_question || message
+        }
+
+        // Enhanced training UI with better error resilience
         const trainingDiv = document.createElement('div')
         trainingDiv.classList = 'flex flex-col gap-2 mt-4'
         trainingDiv.innerHTML = `
@@ -475,14 +481,13 @@ async function sendMessage(message) {
           const answer = textarea.value.trim()
           if (answer) {
             trainingDiv.remove()
-            // Create a new FormData object specifically for training submission
             const trainingData = new FormData()
             trainingData.append('action', 'qobolak_chat')
             trainingData.append('security', qobolakAjax.nonce)
             trainingData.append('is_training', 'true')
-            trainingData.append('previous_question', data.data.previous_question)
+            trainingData.append('previous_question', previousQuestion)
             trainingData.append('training_answer', answer)
-            trainingData.append('message', '') // Add empty message to indicate this is an answer submission
+            trainingData.append('message', '')
 
             try {
               const response = await fetch(qobolakAjax.url, {
@@ -500,13 +505,25 @@ async function sendMessage(message) {
                 )
                 messagesDiv.appendChild(confirmMessageDiv)
                 scrollToBottom()
-                previousQuestion = null // Reset the training state
+
+                // Reset training state with clear indication
+                previousQuestion = null
+              } else {
+                // Improved error handling for training submission
+                const errorMessage = createMessageElement(
+                  'bot',
+                  result.data.message ||
+                    'Failed to save training data. Please try again.',
+                  Date.now()
+                )
+                messagesDiv.appendChild(errorMessage)
+                scrollToBottom()
               }
             } catch (error) {
-              console.error('Error submitting training answer:', error)
+              console.error('Training submission error:', error)
               const errorMessage = createMessageElement(
                 'bot',
-                'Sorry, there was an error saving your answer. Please try again.',
+                'Network error. Please check your connection and try again.',
                 Date.now()
               )
               messagesDiv.appendChild(errorMessage)
@@ -531,15 +548,17 @@ async function sendMessage(message) {
         scrollToBottom()
         textarea.focus()
       } else if (data.data.training_complete) {
-        // Training answer was successfully saved
+        // Explicitly reset training context when training is complete
         previousQuestion = null
       } else {
+        // Ensure training context is reset in non-training scenarios
         previousQuestion = null
       }
     } else {
+      // More informative error handling
       const errorDiv = createMessageElement(
         'bot',
-        data.data.message || 'Sorry, I encountered an error. Please try again.',
+        data.data.message || 'An unexpected error occurred. Please try again.',
         Date.now()
       )
       messagesDiv.appendChild(errorDiv)
@@ -547,10 +566,10 @@ async function sendMessage(message) {
       previousQuestion = null
     }
   } catch (error) {
-    console.error('Error:', error)
+    console.error('Comprehensive error logging:', error)
     const errorDiv = createMessageElement(
       'bot',
-      'Sorry, I encountered an error. Please try again.',
+      'A network or processing error occurred. Please check your connection and try again.',
       Date.now()
     )
     messagesDiv.appendChild(errorDiv)
