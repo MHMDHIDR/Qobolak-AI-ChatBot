@@ -6,6 +6,68 @@ document.addEventListener('DOMContentLoaded', () => {
   const button = document.getElementById('qobolak-btn')
   if (!button) return
 
+  // Check if this is the first visit using localStorage
+  const hasSeenWelcomeTooltip = localStorage.getItem('qobolak_welcome_tooltip')
+
+  // Create tooltip element
+  const tooltip = document.createElement('div')
+  tooltip.id = 'qobolak-welcome-tooltip'
+  tooltip.classList.add(
+    'fixed',
+    'bottom-24',
+    'right-4',
+    'z-[1000]',
+    'bg-white',
+    'text-gray-800',
+    'p-4',
+    'rounded-lg',
+    'shadow-lg',
+    'max-w-[250px]',
+    'transition-all',
+    'duration-300',
+    'ease-in-out'
+  )
+  tooltip.innerHTML = `
+    <label class="flex gap-x-3 items-start select-none" for="qobolak-btn">
+      <div class="mr-3">
+        <svg class="w-6 h-6 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"></path>
+        </svg>
+      </div>
+      <div>
+        <p class="text-sm font-medium">Hey, welcome to Qobolak! 😄</p>
+        <p class="mt-1 text-xs text-gray-600">We would love to assist you with any questions. Click here to start chatting!</p>
+      </div>
+    </label>
+  `
+
+  // Only show tooltip if not seen before
+  if (!hasSeenWelcomeTooltip) {
+    document.body.appendChild(tooltip)
+
+    // Position tooltip relative to button
+    const buttonRect = button.getBoundingClientRect()
+    tooltip.style.bottom = `${window.innerHeight - buttonRect.top + 5}px`
+    tooltip.style.right = `${window.innerWidth - buttonRect.right + 5}px`
+
+    // Animate tooltip
+    setTimeout(() => {
+      tooltip.style.transform = 'translateY(-20px)'
+      tooltip.style.opacity = '1'
+    }, 100)
+
+    const removeTooltip = () => {
+      tooltip.style.transform = 'translateY(20px)'
+      tooltip.style.opacity = '0'
+      setTimeout(() => {
+        document.body.removeChild(tooltip)
+      }, 300)
+      localStorage.setItem('qobolak_welcome_tooltip', 'true')
+    }
+
+    button.addEventListener('click', removeTooltip)
+  }
+
   // Create chat box container if it doesn't exist
   let chatBox = document.getElementById('qobolak-chat')
   if (!chatBox) {
