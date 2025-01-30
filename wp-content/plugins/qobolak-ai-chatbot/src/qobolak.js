@@ -776,26 +776,35 @@ function showDurationOptions(messagesDiv) {
 }
 
 function expandChatBox() {
-  const chatBox = document.getElementById('qobolak-chat')
-  const innerBox = document.getElementById('qobolak-inner')
-  const messagesDiv = document.getElementById('qobolak-messages')
+  // Check if the screen is a desktop (width > 768px)
+  if (window.innerWidth > 768) {
+    const chatInner = document.getElementById('qobolak-inner')
 
-  // Add transition classes if not already present
-  chatBox.classList.add('transition-all', 'duration-300', 'ease-in-out')
-  innerBox.classList.add('transition-all', 'duration-300', 'ease-in-out')
+    // Toggle expanded class
+    chatInner.classList.toggle('expanded')
 
-  // Remove small size classes
-  innerBox.classList.remove('min-w-[25rem]', 'max-w-[25rem]')
+    // Adjust size and styling based on expansion state
+    if (chatInner.classList.contains('expanded')) {
+      chatInner.style.minWidth = '35rem'
+      chatInner.style.maxWidth = '45rem'
+      chatInner.style.height = '80vh'
 
-  // Add expanded size classes
-  innerBox.classList.add('min-w-[50rem]', 'max-w-[50rem]')
+      // Adjust messages container to be scrollable
+      const messagesDiv = document.getElementById('qobolak-messages')
+      messagesDiv.style.maxHeight = 'calc(80vh - 250px)'
+      messagesDiv.style.overflowY = 'auto'
+    } else {
+      // Reset to default size
+      chatInner.style.minWidth = '25rem'
+      chatInner.style.maxWidth = '25rem'
+      chatInner.style.height = 'auto'
 
-  // Increase messages container height
-  messagesDiv.classList.remove('max-h-64')
-  messagesDiv.classList.add('max-h-[370px]')
-
-  // Force a reflow to ensure the transition works
-  void chatBox.offsetWidth
+      // Reset messages container
+      const messagesDiv = document.getElementById('qobolak-messages')
+      messagesDiv.style.maxHeight = '16rem'
+      messagesDiv.style.overflowY = 'auto'
+    }
+  }
 }
 
 function embedCalendar(messagesDiv, calLink, duration) {
